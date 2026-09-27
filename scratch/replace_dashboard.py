@@ -1,4 +1,10 @@
-/**
+import re
+
+with open("src/components/Dashboard.tsx", "r") as f:
+    content = f.read()
+
+# We'll completely rewrite the file.
+new_content = """/**
  * @license
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -145,3 +151,8 @@ export const Dashboard: React.FC = () => {
     </div>
   );
 };
+"""
+
+with open("src/components/Dashboard.tsx", "w") as f:
+    f.write(new_content)
+

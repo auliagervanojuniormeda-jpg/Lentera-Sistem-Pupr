@@ -8,7 +8,11 @@ import { useRoads } from "../context/RoadContext";
 import {
   Milestone,
   Layers,
-  FileCheck
+  FileCheck,
+  Coins,
+  DollarSign,
+  AlertTriangle,
+  CheckCircle2
 } from "lucide-react";
 
 export const Dashboard: React.FC = () => {
@@ -35,6 +39,39 @@ export const Dashboard: React.FC = () => {
     );
     return segments.filter((seg) => uploadedSegmentIds.has(seg.id));
   }, [segments, documents]);
+
+  const retributionStats = useMemo(() => {
+    let saved = localStorage.getItem("lentera_utility_retribution");
+    let retributionList = saved ? JSON.parse(saved) : [
+      { totalRetributionRp: 48625000, status: "Lunas" },
+      { totalRetributionRp: 76500000, status: "Belum Dibayar" },
+      { totalRetributionRp: 22500000, status: "Lunas" },
+      { totalRetributionRp: 14000000, status: "Jatuh Tempo" }
+    ];
+
+    let totalPotential = 0;
+    let totalPaid = 0;
+    let totalUnpaid = 0;
+    let totalOverdue = 0;
+
+    retributionList.forEach((item: any) => {
+      const val = Number(item.totalRetributionRp) || 0;
+      totalPotential += val;
+      if (item.status === "Lunas") totalPaid += val;
+      if (item.status === "Belum Dibayar") totalUnpaid += val;
+      if (item.status === "Jatuh Tempo") totalOverdue += val;
+    });
+
+    return { totalPotential, totalPaid, totalUnpaid, totalOverdue };
+  }, []);
+
+  const formatRp = (num: number) => {
+    return new Intl.NumberFormat("id-ID", {
+      style: "currency",
+      currency: "IDR",
+      maximumFractionDigits: 0,
+    }).format(num);
+  };
 
   return (
     <div className="max-w-7xl mx-auto space-y-6 md:space-y-8 px-4 sm:p-gutter pt-6 md:pt-8 pb-16 md:pb-24">
@@ -93,6 +130,66 @@ export const Dashboard: React.FC = () => {
           </div>
           {/* Bottom accent line */}
           <div className="absolute bottom-0 left-0 h-0.5 bg-secondary w-0 group-hover:w-full transition-all duration-500 ease-out"></div>
+        </div>
+      </div>
+
+      {/* Retribusi Utilitas Panel */}
+      <div className="bg-surface-container-lowest border border-outline-variant/60 rounded-2xl flex flex-col shadow-sm overflow-hidden mt-6">
+        <div className="p-5 sm:p-6 border-b border-outline-variant/60 flex justify-between items-center bg-surface-container-low/50">
+          <div>
+            <h3 className="font-label-lg text-label-lg text-on-surface uppercase tracking-wider flex items-center gap-2">
+              <Coins className="w-5 h-5 text-amber-500" />
+              Rekapan Retribusi Utilitas
+            </h3>
+            <p className="text-body-sm text-on-surface-variant mt-1">
+              Ringkasan tagihan pemanfaatan ruang milik jalan.
+            </p>
+          </div>
+        </div>
+        <div className="p-6 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+          {/* Total Potential */}
+          <div className="bg-surface-container-low p-4 rounded-xl border border-outline-variant/40">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="p-2 bg-blue-100 text-blue-700 rounded-lg">
+                <DollarSign className="w-4 h-4" />
+              </div>
+              <p className="text-xs font-bold text-on-surface-variant uppercase tracking-wider">Total Potensi</p>
+            </div>
+            <p className="text-lg font-black text-on-surface">{formatRp(retributionStats.totalPotential)}</p>
+          </div>
+
+          {/* Total Paid */}
+          <div className="bg-surface-container-low p-4 rounded-xl border border-outline-variant/40">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="p-2 bg-emerald-100 text-emerald-700 rounded-lg">
+                <CheckCircle2 className="w-4 h-4" />
+              </div>
+              <p className="text-xs font-bold text-on-surface-variant uppercase tracking-wider">Lunas</p>
+            </div>
+            <p className="text-lg font-black text-emerald-600">{formatRp(retributionStats.totalPaid)}</p>
+          </div>
+
+          {/* Total Unpaid */}
+          <div className="bg-surface-container-low p-4 rounded-xl border border-outline-variant/40">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="p-2 bg-amber-100 text-amber-700 rounded-lg">
+                <Coins className="w-4 h-4" />
+              </div>
+              <p className="text-xs font-bold text-on-surface-variant uppercase tracking-wider">Belum Dibayar</p>
+            </div>
+            <p className="text-lg font-black text-amber-600">{formatRp(retributionStats.totalUnpaid)}</p>
+          </div>
+
+          {/* Total Overdue */}
+          <div className="bg-surface-container-low p-4 rounded-xl border border-outline-variant/40">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="p-2 bg-red-100 text-red-700 rounded-lg">
+                <AlertTriangle className="w-4 h-4" />
+              </div>
+              <p className="text-xs font-bold text-on-surface-variant uppercase tracking-wider">Jatuh Tempo</p>
+            </div>
+            <p className="text-lg font-black text-red-600">{formatRp(retributionStats.totalOverdue)}</p>
+          </div>
         </div>
       </div>
 

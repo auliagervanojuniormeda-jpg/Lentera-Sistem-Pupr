@@ -51,7 +51,7 @@ export const LegerDocuments: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState("");
 
   // Upload Form states
-  const [selectedSegmentId, setSelectedSegmentId] = useState<string>(segments[0]?.id || "");
+  const [selectedSegmentId, setSelectedSegmentId] = useState<string>("");
   const [docType, setDocType] = useState<"kartu_leger" | "sertifikat_jalan">("kartu_leger");
   const [documentNo, setDocumentNo] = useState("");
   const [issueDate, setIssueDate] = useState("");
@@ -169,6 +169,11 @@ export const LegerDocuments: React.FC = () => {
       return;
     }
 
+    if (!selectedSegmentId) {
+      showToast("Harap pilih Ruas Jalan terlebih dahulu.", "error");
+      return;
+    }
+
     if (!documentNo) {
       showToast("Harap isi Nomor Dokumen.", "error");
       return;
@@ -273,12 +278,13 @@ export const LegerDocuments: React.FC = () => {
                   value={selectedSegmentId}
                   onChange={(e) => {
                     setSelectedSegmentId(e.target.value);
-                    if (selectedFile && useAiExtraction) {
+                    if (selectedFile && useAiExtraction && e.target.value) {
                       triggerAiExtraction(selectedFile, e.target.value, docType);
                     }
                   }}
                   className="w-full px-3.5 py-2.5 bg-surface-container-low border border-outline-variant rounded-lg font-body-sm text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors"
                 >
+                  <option value="" disabled>-- Pilih Ruas Jalan --</option>
                   {segments.map((seg) => (
                     <option key={seg.id} value={seg.id}>
                       [{seg.code}] {seg.name}

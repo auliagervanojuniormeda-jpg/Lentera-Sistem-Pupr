@@ -1178,11 +1178,19 @@ export const UtilitiesManagement: React.FC = () => {
                       onChange={(e) => setSelectedInvId(e.target.value)}
                       className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     >
-                      {inventoryList.map((item) => (
-                        <option key={item.id} value={item.id}>
-                          {item.providerName} ({item.code})
-                        </option>
-                      ))}
+                      {["Atas Tanah / Udara (Overhead)", "Bawah Tanah (Underground)", "Menyeberang Jalan (Crossing)", "Bahu Jalan (Shoulder)"].map((pos) => {
+                        const itemsInPos = inventoryList.filter((item) => item.position === pos);
+                        if (itemsInPos.length === 0) return null;
+                        return (
+                          <optgroup key={pos} label={pos}>
+                            {itemsInPos.map((item) => (
+                              <option key={item.id} value={item.id}>
+                                {item.providerName} ({item.code})
+                              </option>
+                            ))}
+                          </optgroup>
+                        );
+                      })}
                     </select>
                     {inventoryList.find((i) => i.id === selectedInvId) && (
                       <div className="mt-2.5 p-2.5 rounded-lg bg-slate-800/80 border border-slate-700/60 text-xs space-y-1 text-slate-300">

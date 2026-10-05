@@ -485,7 +485,7 @@ export const RoadProvider: React.FC<{ children: React.ReactNode }> = ({ children
           .eq("code", dummySegment.code)
           .single();
 
-        if (checkError && (checkError.message.includes("Load failed") || checkError.message.includes("Failed to fetch"))) {
+        if (checkError && checkError.code !== "PGRST116") {
           isOffline = true;
         }
 
@@ -511,7 +511,7 @@ export const RoadProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
           if (insertSegError) {
             console.error("[LENTERA] Auto-sync segment error:", insertSegError.message);
-            if (insertSegError.message.includes("Load failed") || insertSegError.message.includes("Failed to fetch")) {
+            if (insertSegError.code !== "PGRST116" && insertSegError.code !== "23505") { // not 0 rows and not unique violation
               isOffline = true;
             } else {
               showToast(`Gagal sinkronisasi ruas jalan: ${insertSegError.message}`, "error");
@@ -536,7 +536,7 @@ export const RoadProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (uploadError) {
         console.error("[LENTERA] Storage upload error:", uploadError.message);
-        if (uploadError.message.includes("Load failed") || uploadError.message.includes("Failed to fetch")) {
+        if (!uploadError.message || uploadError.message.includes("Load failed") || uploadError.message.includes("Failed to fetch") || uploadError.message.includes("Network")) {
           isOffline = true;
         } else {
           showToast(`Gagal mengunggah berkas: ${uploadError.message}`, "error");
@@ -581,7 +581,7 @@ export const RoadProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (error) {
         console.error("[LENTERA] addDocument error:", error.message);
-        if (error.message.includes("Load failed") || error.message.includes("Failed to fetch")) {
+        if (error.code !== "PGRST116" && error.code !== "23505") { // If not standard known Postgres errors, assume offline/network failure
           isOffline = true;
         } else {
           showToast(`Gagal menyimpan data dokumen: ${error.message}`, "error");

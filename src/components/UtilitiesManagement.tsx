@@ -135,6 +135,66 @@ const INITIAL_INVENTORY_DATA: UtilityInventoryItem[] = [
     description: "Box culvert / ducting terpadu milik pemerintah provinsi untuk penempatan kabel fiber optik bersama.",
     lastChecked: "12 Jan 2026",
   },
+  {
+    id: "utl-7",
+    code: "UTL-XLA-007",
+    providerName: "PT XL Axiata Tbk",
+    utilityType: "Telekomunikasi / Fiber Optik",
+    segmentId: "seg-1",
+    segmentName: "Jl. Yos Sudarso",
+    district: "Kota Kupang",
+    lengthUsedMeter: 2100,
+    position: "Atas Tanah / Udara (Overhead)",
+    status: "Aktif (Izin Berlaku)",
+    installYear: 2023,
+    description: "Kabel udara fiber optik menempel pada tiang PLN/Telkom eksisting.",
+    lastChecked: "20 Feb 2026",
+  },
+  {
+    id: "utl-8",
+    code: "UTL-IND-008",
+    providerName: "PT Indosat Tbk (Indosat Ooredoo Hutchison)",
+    utilityType: "Telekomunikasi / Fiber Optik",
+    segmentId: "seg-2",
+    segmentName: "Sp. Patung Sonbai - Sp. Tiga Bundaran Oebufu",
+    district: "Kota Kupang",
+    lengthUsedMeter: 3400,
+    position: "Bawah Tanah (Underground)",
+    status: "Aktif (Izin Berlaku)",
+    installYear: 2024,
+    description: "Kabel fiber optik bawah tanah (direct burial) untuk backbone seluler.",
+    lastChecked: "18 Jan 2026",
+  },
+  {
+    id: "utl-9",
+    code: "UTL-TSEL-009",
+    providerName: "PT Telekomunikasi Selular (Telkomsel)",
+    utilityType: "Telekomunikasi / Fiber Optik",
+    segmentId: "seg-4",
+    segmentName: "Soe - Kapan",
+    district: "Kab. Timor Tengah Selatan",
+    lengthUsedMeter: 5600,
+    position: "Atas Tanah / Udara (Overhead)",
+    status: "Aktif (Izin Berlaku)",
+    installYear: 2022,
+    description: "Kabel fiber optik menuju site BTS Telkomsel di area Kapan.",
+    lastChecked: "02 Mar 2026",
+  },
+  {
+    id: "utl-10",
+    code: "UTL-PDAM-010",
+    providerName: "Perumda Air Minum Kota Kupang",
+    utilityType: "Air Bersih (PDAM)",
+    segmentId: "seg-1",
+    segmentName: "Jl. Yos Sudarso",
+    district: "Kota Kupang",
+    lengthUsedMeter: 1800,
+    position: "Bawah Tanah (Underground)",
+    status: "Aktif (Izin Berlaku)",
+    installYear: 2019,
+    description: "Jaringan pipa distribusi air bersih ke pemukiman.",
+    lastChecked: "11 Feb 2026",
+  },
 ];
 
 // ─── Default Initial Retribution Data ────────────────────────────────────────
@@ -235,6 +295,18 @@ export const UtilitiesManagement: React.FC = () => {
   useEffect(() => {
     localStorage.setItem("lentera_utility_retribution", JSON.stringify(retributionList));
   }, [retributionList]);
+
+  // Merge any new default utilities if they are missing from localStorage
+  useEffect(() => {
+    setInventoryList((prev) => {
+      const existingIds = new Set(prev.map(i => i.id));
+      const missingItems = INITIAL_INVENTORY_DATA.filter(i => !existingIds.has(i.id));
+      if (missingItems.length > 0) {
+        return [...prev, ...missingItems];
+      }
+      return prev;
+    });
+  }, []);
 
   // ─── Inventory Filter State ────────────────────────────────────────────────
   const [searchQuery, setSearchQuery] = useState("");

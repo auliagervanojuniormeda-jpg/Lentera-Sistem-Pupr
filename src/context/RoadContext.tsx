@@ -472,21 +472,26 @@ export const RoadProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const storagePath = `documents/${Date.now()}_${file.name.replace(/\s+/g, "_")}`;
 
     let targetSegmentId = doc.segmentId;
+    let isOffline = false;
 
     // ── 0. Auto-sync Dummy Segment ke Database ──
     if (targetSegmentId.startsWith("seg-")) {
       const dummySegment = segments.find(s => s.id === targetSegmentId);
       if (dummySegment) {
         // Cek apakah sudah ada berdasarkan kode
-        const { data: existingSeg } = await supabase
+        const { data: existingSeg, error: checkError } = await supabase
           .from("road_segments")
           .select("id")
           .eq("code", dummySegment.code)
           .single();
 
+        if (checkError && (checkError.message.includes("Load failed") || checkError.message.includes("Failed to fetch"))) {
+          isOffline = true;
+        }
+
         if (existingSeg) {
           targetSegmentId = existingSeg.id;
-        } else {
+        } else if (!isOffline) {
           // Insert ke database untuk mendapatkan UUID asli
           const { data: newSeg, error: insertSegError } = await supabase
             .from("road_segments")
@@ -506,8 +511,12 @@ export const RoadProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
           if (insertSegError) {
             console.error("[LENTERA] Auto-sync segment error:", insertSegError.message);
-            showToast(`Gagal sinkronisasi ruas jalan: ${insertSegError.message}`, "error");
-            return;
+            if (insertSegError.message.includes("Load failed") || insertSegError.message.includes("Failed to fetch")) {
+              isOffline = true;
+            } else {
+              showToast(`Gagal sinkronisasi ruas jalan: ${insertSegError.message}`, "error");
+              return;
+            }
           }
           if (newSeg) {
             targetSegmentId = newSeg.id;
@@ -518,66 +527,107 @@ export const RoadProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     onProgress?.(20);
 
-    const { error: uploadError } = await supabase.storage
-      .from(BUCKET)
-      .upload(storagePath, file, { cacheControl: "3600", upsert: false });
+    let fileUrl: string | null = null;
 
-    if (uploadError) {
-      console.error("[LENTERA] Storage upload error:", uploadError.message);
-      showToast(`Gagal mengunggah berkas: ${uploadError.message}`, "error");
-      onProgress?.(0);
-      return;
+    if (!isOffline) {
+      const { error: uploadError } = await supabase.storage
+        .from(BUCKET)
+        .upload(storagePath, file, { cacheControl: "3600", upsert: false });
+
+      if (uploadError) {
+        console.error("[LENTERA] Storage upload error:", uploadError.message);
+        if (uploadError.message.includes("Load failed") || uploadError.message.includes("Failed to fetch")) {
+          isOffline = true;
+        } else {
+          showToast(`Gagal mengunggah berkas: ${uploadError.message}`, "error");
+          onProgress?.(0);
+          return;
+        }
+      } else {
+        onProgress?.(70);
+        const { data: publicUrlData } = supabase.storage
+          .from(BUCKET)
+          .getPublicUrl(storagePath);
+        fileUrl = publicUrlData?.publicUrl ?? null;
+      }
     }
 
-    onProgress?.(70);
-
-    // ── 2. Ambil public URL ──
-    const { data: publicUrlData } = supabase.storage
-      .from(BUCKET)
-      .getPublicUrl(storagePath);
-
-    const fileUrl = publicUrlData?.publicUrl ?? null;
+    if (isOffline) {
+      fileUrl = URL.createObjectURL(file);
+    }
     
     onProgress?.(90);
 
-    // ── 3. Simpan metadata ke tabel leger_documents ──
-    const { data, error } = await supabase
-      .from("leger_documents")
-      .insert({
-        segment_id: targetSegmentId,
+    let newDoc: LegerDocument | undefined;
+
+    if (!isOffline) {
+      // ── 3. Simpan metadata ke tabel leger_documents ──
+      const { data, error } = await supabase
+        .from("leger_documents")
+        .insert({
+          segment_id: targetSegmentId,
+          type: doc.type,
+          document_no: doc.documentNo,
+          file_name: doc.fileName,
+          file_size: doc.fileSize,
+          file_url: fileUrl,
+          issue_date: doc.issueDate,
+          notes: doc.notes ?? null,
+          uploaded_by: userId,
+          status: "Pending",
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error("[LENTERA] addDocument error:", error.message);
+        if (error.message.includes("Load failed") || error.message.includes("Failed to fetch")) {
+          isOffline = true;
+        } else {
+          showToast(`Gagal menyimpan data dokumen: ${error.message}`, "error");
+          onProgress?.(0);
+          return;
+        }
+      } else if (data) {
+        // Inject uploader name manually since single insert won't return joined data
+        newDoc = mapDbToDocument({ ...data, uploader: { full_name: userName } });
+      }
+    }
+
+    if (isOffline || !newDoc) {
+      newDoc = {
+        id: `doc-mock-${Date.now()}`,
+        segmentId: targetSegmentId,
         type: doc.type,
-        document_no: doc.documentNo,
-        file_name: doc.fileName,
-        file_size: doc.fileSize,
-        file_url: fileUrl,
-        issue_date: doc.issueDate,
-        notes: doc.notes ?? null,
-        uploaded_by: userId,
+        documentNo: doc.documentNo,
+        fileName: doc.fileName,
+        fileSize: doc.fileSize,
+        fileUrl: fileUrl,
+        issueDate: doc.issueDate,
+        notes: doc.notes ?? "Mode Offline: Disimpan sementara di memori peramban.",
+        uploadedBy: userName,
+        uploadedAt: new Intl.DateTimeFormat("id-ID", {
+          day: "2-digit",
+          month: "long",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        }).format(new Date()),
         status: "Pending",
-      })
-      .select()
-      .single();
-
-    if (error) {
-      console.error("[LENTERA] addDocument error:", error.message);
-      showToast(`Gagal menyimpan data dokumen: ${error.message}`, "error");
-      onProgress?.(0);
-      return;
-    }
-
-    if (data) {
-      // Inject uploader name manually since single insert won't return joined data
-      const newDoc = mapDbToDocument({ ...data, uploader: { full_name: userName } });
-      setDocuments((prev) => [newDoc, ...prev]);
+      };
+      showToast(`Mode Offline: Dokumen "${doc.fileName}" berhasil ditambahkan secara lokal!`, "success");
+    } else {
       showToast(`Dokumen "${doc.fileName}" berhasil diunggah!`, "success");
-
-      await _addActivity(
-        "Unggah Dokumen Leger",
-        `Dokumen ${doc.type === "kartu_leger" ? "Kartu Leger" : "Sertifikat Jalan"} diunggah untuk ruas ${targetSegment?.name || "Jalan"}.`,
-        "survey",
-        doc.segmentId
-      );
     }
+
+    setDocuments((prev) => [newDoc as LegerDocument, ...prev]);
+
+    await _addActivity(
+      "Unggah Dokumen Leger",
+      `Dokumen ${doc.type === "kartu_leger" ? "Kartu Leger" : "Sertifikat Jalan"} diunggah untuk ruas ${targetSegment?.name || "Jalan"}.`,
+      "survey",
+      doc.segmentId
+    );
   };
 
   // ─── updateDocumentStatus ──────────────────────────────────────────────────

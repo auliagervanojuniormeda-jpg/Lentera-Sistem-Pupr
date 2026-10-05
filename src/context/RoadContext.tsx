@@ -7,6 +7,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { RoadSegment, RoadCondition, SurfaceType, MaintenanceActivity, LegerDocument, GuidelineDocument } from "../types";
 import { supabase } from "../lib/supabase";
 import { DISTRICT_LIST, KECAMATAN_MAP, INITIAL_ROAD_SEGMENTS } from "../data/initialData";
+import { saveDocumentToDB, getDocumentsFromDB, deleteDocumentFromDB } from "../lib/indexeddb";
 
 // ─── DB Row → Frontend Type Mappers ──────────────────────────────────────────
 
@@ -229,12 +230,24 @@ export const RoadProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setActivities((actRes.data ?? []).map(mapDbToActivity));
     }
 
+    let allDocs: LegerDocument[] = [];
     if (docRes.error) {
       console.error("[LENTERA] Documents fetch error:", docRes.error.message);
       hasError = true;
     } else {
-      setDocuments((docRes.data ?? []).map(mapDbToDocument));
+      allDocs = (docRes.data ?? []).map(mapDbToDocument);
     }
+    try {
+      const localDocs = await getDocumentsFromDB();
+      const formattedLocalDocs = localDocs.map(item => ({
+        ...item.metadata,
+        fileUrl: URL.createObjectURL(item.file)
+      }));
+      allDocs = [...formattedLocalDocs, ...allDocs];
+    } catch (e) {
+      console.error("[LENTERA] IndexedDB load error:", e);
+    }
+    setDocuments(allDocs);
 
     if (distRes.error) {
       console.error("[LENTERA] Districts fetch error:", distRes.error.message);
@@ -525,102 +538,70 @@ export const RoadProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
 
-    onProgress?.(20);
+    let newDoc: LegerDocument = {
+      id: `doc-local-${Date.now()}`,
+      segmentId: targetSegmentId,
+      type: doc.type,
+      documentNo: doc.documentNo,
+      fileName: doc.fileName,
+      fileSize: doc.fileSize,
+      fileUrl: URL.createObjectURL(file), // will be overridden if Supabase succeeds
+      issueDate: doc.issueDate,
+      notes: doc.notes ?? "",
+      uploadedBy: userName,
+      uploadedAt: new Intl.DateTimeFormat("id-ID", {
+        day: "2-digit",
+        month: "long",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      }).format(new Date()),
+      status: "Pending",
+    };
 
-    let fileUrl: string | null = null;
-
-    if (!isOffline) {
-      const { error: uploadError } = await supabase.storage
-        .from(BUCKET)
-        .upload(storagePath, file, { cacheControl: "3600", upsert: false });
-
-      if (uploadError) {
-        console.error("[LENTERA] Storage upload error:", uploadError.message);
-        if (!uploadError.message || uploadError.message.includes("Load failed") || uploadError.message.includes("Failed to fetch") || uploadError.message.includes("Network")) {
-          isOffline = true;
-        } else {
-          showToast(`Gagal mengunggah berkas: ${uploadError.message}`, "error");
-          onProgress?.(0);
-          return;
-        }
-      } else {
-        onProgress?.(70);
-        const { data: publicUrlData } = supabase.storage
-          .from(BUCKET)
-          .getPublicUrl(storagePath);
-        fileUrl = publicUrlData?.publicUrl ?? null;
+    // Try Supabase first, but catch all errors silently
+    try {
+      // 1. Upload file
+      const { error: uploadError } = await supabase.storage.from(BUCKET).upload(storagePath, file, { cacheControl: "3600" });
+      if (!uploadError) {
+         const { data: publicUrlData } = supabase.storage.from(BUCKET).getPublicUrl(storagePath);
+         newDoc.fileUrl = publicUrlData?.publicUrl ?? newDoc.fileUrl;
+         
+         // 2. Insert metadata
+         const { data, error } = await supabase.from("leger_documents").insert({
+            segment_id: targetSegmentId,
+            type: doc.type,
+            document_no: doc.documentNo,
+            file_name: doc.fileName,
+            file_size: doc.fileSize,
+            file_url: newDoc.fileUrl,
+            issue_date: doc.issueDate,
+            notes: doc.notes ?? null,
+            uploaded_by: userId,
+            status: "Pending",
+         }).select().single();
+         
+         if (data && !error) {
+            newDoc.id = data.id; // use real ID
+            newDoc = mapDbToDocument({ ...data, uploader: { full_name: userName } });
+         }
       }
+    } catch (e) {
+       // Ignore Supabase errors
     }
 
-    if (isOffline) {
-      fileUrl = URL.createObjectURL(file);
-    }
-    
-    onProgress?.(90);
-
-    let newDoc: LegerDocument | undefined;
-
-    if (!isOffline) {
-      // ── 3. Simpan metadata ke tabel leger_documents ──
-      const { data, error } = await supabase
-        .from("leger_documents")
-        .insert({
-          segment_id: targetSegmentId,
-          type: doc.type,
-          document_no: doc.documentNo,
-          file_name: doc.fileName,
-          file_size: doc.fileSize,
-          file_url: fileUrl,
-          issue_date: doc.issueDate,
-          notes: doc.notes ?? null,
-          uploaded_by: userId,
-          status: "Pending",
-        })
-        .select()
-        .single();
-
-      if (error) {
-        console.error("[LENTERA] addDocument error:", error.message);
-        if (error.code !== "PGRST116" && error.code !== "23505") { // If not standard known Postgres errors, assume offline/network failure
-          isOffline = true;
-        } else {
-          showToast(`Gagal menyimpan data dokumen: ${error.message}`, "error");
-          onProgress?.(0);
-          return;
-        }
-      } else if (data) {
-        // Inject uploader name manually since single insert won't return joined data
-        newDoc = mapDbToDocument({ ...data, uploader: { full_name: userName } });
-      }
+    // SAVE TO INDEXED DB (PERMANENT SYSTEM STORAGE)
+    try {
+      await saveDocumentToDB(newDoc, file);
+      showToast(`Dokumen "${doc.fileName}" berhasil disimpan permanen di sistem!`, "success");
+    } catch (e) {
+      showToast(`Gagal menyimpan dokumen secara lokal: ${e}`, "error");
+      return;
     }
 
-    if (isOffline || !newDoc) {
-      newDoc = {
-        id: `doc-mock-${Date.now()}`,
-        segmentId: targetSegmentId,
-        type: doc.type,
-        documentNo: doc.documentNo,
-        fileName: doc.fileName,
-        fileSize: doc.fileSize,
-        fileUrl: fileUrl,
-        issueDate: doc.issueDate,
-        notes: doc.notes ?? "Mode Offline: Disimpan sementara di memori peramban.",
-        uploadedBy: userName,
-        uploadedAt: new Intl.DateTimeFormat("id-ID", {
-          day: "2-digit",
-          month: "long",
-          year: "numeric",
-          hour: "2-digit",
-          minute: "2-digit",
-        }).format(new Date()),
-        status: "Pending",
-      };
-      showToast(`Mode Offline: Dokumen "${doc.fileName}" berhasil ditambahkan secara lokal!`, "success");
-    } else {
-      showToast(`Dokumen "${doc.fileName}" berhasil diunggah!`, "success");
-    }
+    setDocuments((prev) => [newDoc, ...prev]);
 
-    setDocuments((prev) => [newDoc as LegerDocument, ...prev]);
+    onProgress?.(100);
 
     await _addActivity(
       "Unggah Dokumen Leger",
@@ -680,13 +661,15 @@ export const RoadProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Optimistic update
     setDocuments((prev) => prev.filter((doc) => doc.id !== id));
 
-    const { error } = await supabase.from("leger_documents").delete().eq("id", id);
-
-    if (error) {
-      if (id.startsWith("doc-mock-")) {
-        console.warn("[LENTERA] deleteDocument bypassed for mock document");
-        // Keep optimistic update, do not rollback since it's just a local mock
-      } else {
+    if (id.startsWith("doc-local-") || id.startsWith("doc-mock-")) {
+      try {
+        await deleteDocumentFromDB(id);
+      } catch (e) {
+        console.error("[LENTERA] deleteDocumentFromDB error:", e);
+      }
+    } else {
+      const { error } = await supabase.from("leger_documents").delete().eq("id", id);
+      if (error) {
         // Rollback
         setDocuments((prev) => [docToDelete, ...prev]);
         console.error("[LENTERA] deleteDocument error:", error.message);

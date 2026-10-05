@@ -28,7 +28,9 @@ const mockStorage = {
 };
 
 const mockAuth = {
-  getUser: () => Promise.resolve({ data: { user: null }, error: null })
+  getUser: () => Promise.resolve({ data: { user: null }, error: null }),
+  getSession: () => Promise.resolve({ data: { session: null }, error: null }),
+  onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } })
 };
 
 // Jika key tidak valid, kita gunakan MOCK client untuk mencegah browser

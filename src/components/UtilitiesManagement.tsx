@@ -1276,23 +1276,29 @@ export const UtilitiesManagement: React.FC = () => {
                   <div className="space-y-3">
                     <div>
                       <label className="block text-xs font-bold text-slate-300 mb-1">Nama Wajib Retribusi / Penyedia:</label>
-                      <input
-                        type="text"
-                        placeholder="Contoh: PT PLN (Persero) / PT Biznet..."
+                      <select
                         value={calcManualProvider}
                         onChange={(e) => setCalcManualProvider(e.target.value)}
                         className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
-                      />
+                      >
+                        <option value="">-- Pilih Wajib Retribusi --</option>
+                        {Array.from(new Set(inventoryList.map(i => i.providerName))).sort().map(name => (
+                          <option key={name} value={name}>{name}</option>
+                        ))}
+                      </select>
                     </div>
                     <div>
                       <label className="block text-xs font-bold text-slate-300 mb-1">Ruas Jalan / Lokasi Pemanfaatan:</label>
-                      <input
-                        type="text"
-                        placeholder="Contoh: Jl. El Tari / Sp. Polda..."
+                      <select
                         value={calcManualSegment}
                         onChange={(e) => setCalcManualSegment(e.target.value)}
                         className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
-                      />
+                      >
+                        <option value="">-- Pilih Ruas Jalan --</option>
+                        {segments.map(seg => (
+                          <option key={seg.id} value={seg.name}>{seg.name}</option>
+                        ))}
+                      </select>
                     </div>
                     <div>
                       <label className="block text-xs font-bold text-slate-300 mb-1">Jenis Utilitas:</label>

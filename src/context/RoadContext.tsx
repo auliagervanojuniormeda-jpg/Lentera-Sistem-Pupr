@@ -172,6 +172,15 @@ export const RoadProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsDbLoading(true);
     let hasError = false;
 
+    const handleFetchError = (resource: string, error: any) => {
+      if (!error?.message || error.message.includes("Load failed") || error.message.includes("Failed to fetch") || error.message.includes("Network")) {
+        // Silent fallback for offline / invalid DB configuration
+      } else {
+        console.error(`[LENTERA] ${resource} fetch error:`, error.message);
+        hasError = true;
+      }
+    };
+
     // Fetch each resource independently so partial failures don't block others
     const [segRes, actRes, docRes, distRes, subDistRes, guideRes] = await Promise.all([
       supabase
@@ -207,8 +216,7 @@ export const RoadProvider: React.FC<{ children: React.ReactNode }> = ({ children
     ]);
 
     if (segRes.error) {
-      console.error("[LENTERA] Segments fetch error:", segRes.error.message);
-      hasError = true;
+      handleFetchError("Segments", segRes.error);
       // FALLBACK TO MOCK DATA IF DB FAILS
       setSegments(INITIAL_ROAD_SEGMENTS || []);
     } else {
@@ -224,16 +232,14 @@ export const RoadProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     if (actRes.error) {
-      console.error("[LENTERA] Activities fetch error:", actRes.error.message);
-      hasError = true;
+      handleFetchError("Activities", actRes.error);
     } else {
       setActivities((actRes.data ?? []).map(mapDbToActivity));
     }
 
     let allDocs: LegerDocument[] = [];
     if (docRes.error) {
-      console.error("[LENTERA] Documents fetch error:", docRes.error.message);
-      hasError = true;
+      handleFetchError("Documents", docRes.error);
     } else {
       allDocs = (docRes.data ?? []).map(mapDbToDocument);
     }
@@ -250,15 +256,13 @@ export const RoadProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setDocuments(allDocs);
 
     if (distRes.error) {
-      console.error("[LENTERA] Districts fetch error:", distRes.error.message);
-      hasError = true;
+      handleFetchError("Districts", distRes.error);
     } else if (distRes.data && distRes.data.length > 0) {
       setDistrictList(distRes.data.map((d: any) => d.name));
     }
 
     if (subDistRes.error) {
-      console.error("[LENTERA] Sub-districts fetch error:", subDistRes.error.message);
-      hasError = true;
+      handleFetchError("Sub-districts", subDistRes.error);
     } else if (subDistRes.data && subDistRes.data.length > 0) {
       const map: Record<string, string[]> = {};
       subDistRes.data.forEach((sd: any) => {
@@ -274,8 +278,7 @@ export const RoadProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     if (guideRes.error) {
-      console.error("[LENTERA] Guidelines fetch error:", guideRes.error.message);
-      hasError = true;
+      handleFetchError("Guidelines", guideRes.error);
     } else {
       setGuidelines((guideRes.data ?? []).map(mapDbToGuideline));
     }

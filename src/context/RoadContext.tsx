@@ -7,7 +7,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { RoadSegment, RoadCondition, SurfaceType, MaintenanceActivity, LegerDocument, GuidelineDocument } from "../types";
 import { supabase } from "../lib/supabase";
 import { DISTRICT_LIST, KECAMATAN_MAP, INITIAL_ROAD_SEGMENTS } from "../data/initialData";
-import { saveDocumentToDB, getDocumentsFromDB, deleteDocumentFromDB } from "../lib/indexeddb";
+import { saveDocumentToDB, getDocumentsFromDB, deleteDocumentFromDB, updateDocumentMetadataInDB } from "../lib/indexeddb";
 
 // ─── DB Row → Frontend Type Mappers ──────────────────────────────────────────
 
@@ -681,8 +681,18 @@ export const RoadProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     setDocuments((prev) =>
-      prev.map((d) => d.id === id ? { ...d, status, ...(notes !== undefined && { notes }) } : d)
+      prev.map((d) => (d.id === id ? { ...d, status, ...(notes !== undefined && { notes }) } : d))
     );
+
+    // Save permanently to IndexedDB so it persists on refresh
+    if (id.startsWith("doc-local-") || id.startsWith("doc-mock-")) {
+      try {
+        await updateDocumentMetadataInDB(id, { status, ...(notes !== undefined && { notes }) });
+      } catch (e) {
+        console.error("[LENTERA] updateDocumentMetadataInDB error:", e);
+      }
+    }
+
     showToast(`Status dokumen berhasil diperbarui menjadi ${status}.`, "success");
 
     if (doc) {

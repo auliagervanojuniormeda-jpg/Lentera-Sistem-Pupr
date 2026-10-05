@@ -44,3 +44,25 @@ export const deleteDocumentFromDB = async (id: string): Promise<void> => {
     transaction.onerror = () => reject(transaction.error);
   });
 };
+
+export const updateDocumentMetadataInDB = async (id: string, updates: any): Promise<void> => {
+  const db = await initDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction('documents', 'readwrite');
+    const store = transaction.objectStore('documents');
+    const getRequest = store.get(id);
+    
+    getRequest.onsuccess = () => {
+      const data = getRequest.result;
+      if (data) {
+        data.metadata = { ...data.metadata, ...updates };
+        const putRequest = store.put(data);
+        putRequest.onsuccess = () => resolve();
+        putRequest.onerror = () => reject(putRequest.error);
+      } else {
+        resolve(); // Not found, ignore
+      }
+    };
+    getRequest.onerror = () => reject(getRequest.error);
+  });
+};

@@ -339,7 +339,19 @@ export const RoadProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!error && data) {
       setActivities((prev) => [mapDbToActivity(data), ...prev]);
     } else if (error) {
-      console.error("[LENTERA] addActivity error:", error.message);
+      if (!error?.message || error.message.includes("Load failed") || error.message.includes("Failed to fetch") || error.message.includes("Network")) {
+        // Silent optimistic update for offline mode
+        setActivities((prev) => [{
+          id: `act-local-${Date.now()}`,
+          title,
+          description,
+          iconType,
+          timeLabel: "Baru saja",
+          date: today
+        }, ...prev]);
+      } else {
+        console.error("[LENTERA] addActivity error:", error.message);
+      }
     }
   };
 
@@ -384,6 +396,18 @@ export const RoadProvider: React.FC<{ children: React.ReactNode }> = ({ children
       .single();
 
     if (error) {
+      if (!error?.message || error.message.includes("Load failed") || error.message.includes("Failed to fetch") || error.message.includes("Network")) {
+        // Silent optimistic update
+        const fallbackSeg: RoadSegment = {
+          ...newSeg,
+          id: `seg-local-${Date.now()}`,
+          lastUpdated: "Baru saja"
+        };
+        setSegments((prev) => [fallbackSeg, ...prev]);
+        showToast(`Ruas "${newSeg.name}" berhasil ditambahkan secara lokal!`, "success");
+        await _addActivity("Registrasi Ruas Baru", `Ruas ${newSeg.name} (${newSeg.code}) didaftarkan secara lokal.`, "task_alt", fallbackSeg.id);
+        return;
+      }
       console.error("[LENTERA] addSegment error:", error.message);
       showToast(`Gagal menyimpan ruas: ${error.message}`, "error");
       return;
@@ -431,6 +455,11 @@ export const RoadProvider: React.FC<{ children: React.ReactNode }> = ({ children
       .single();
 
     if (error) {
+      if (!error?.message || error.message.includes("Load failed") || error.message.includes("Failed to fetch") || error.message.includes("Network")) {
+        setSegments((prev) => prev.map((seg) => seg.id === id ? { ...seg, ...updatedFields } as RoadSegment : seg));
+        showToast("Ruas jalan berhasil diperbarui secara lokal.", "success");
+        return;
+      }
       console.error("[LENTERA] updateSegment error:", error.message);
       showToast(`Gagal memperbarui ruas: ${error.message}`, "error");
       return;
@@ -456,6 +485,10 @@ export const RoadProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const { error } = await supabase.from("road_segments").delete().eq("id", id);
 
     if (error) {
+      if (!error?.message || error.message.includes("Load failed") || error.message.includes("Failed to fetch") || error.message.includes("Network")) {
+         // Silently allow optimistic delete
+         return;
+      }
       // Rollback optimistic update
       setSegments((prev) => [segmentToDelete, ...prev]);
       setDocuments((prev) => [...docsToDelete, ...prev]);
@@ -526,10 +559,12 @@ export const RoadProvider: React.FC<{ children: React.ReactNode }> = ({ children
             .single();
 
           if (insertSegError) {
-            console.error("[LENTERA] Auto-sync segment error:", insertSegError.message);
-            if (insertSegError.code !== "PGRST116" && insertSegError.code !== "23505") { // not 0 rows and not unique violation
+            if (!insertSegError?.message || insertSegError.message.includes("Load failed") || insertSegError.message.includes("Failed to fetch") || insertSegError.message.includes("Network")) {
+               isOffline = true; // Silent fallback
+            } else if (insertSegError.code !== "PGRST116" && insertSegError.code !== "23505") { 
               isOffline = true;
             } else {
+              console.error("[LENTERA] Auto-sync segment error:", insertSegError.message);
               showToast(`Gagal sinkronisasi ruas jalan: ${insertSegError.message}`, "error");
               return;
             }
@@ -637,7 +672,11 @@ export const RoadProvider: React.FC<{ children: React.ReactNode }> = ({ children
       .eq("id", id);
 
     if (error) {
-      console.warn("[LENTERA] updateDocumentStatus DB error, using optimistic fallback:", error.message);
+      if (!error?.message || error.message.includes("Load failed") || error.message.includes("Failed to fetch") || error.message.includes("Network")) {
+        // Silent optimistic update
+      } else {
+        console.warn("[LENTERA] updateDocumentStatus DB error, using optimistic fallback:", error.message);
+      }
       // Fallback for demo: continue updating local state even if DB fails
     }
 
@@ -710,10 +749,14 @@ export const RoadProvider: React.FC<{ children: React.ReactNode }> = ({ children
       .upload(storagePath, file, { cacheControl: "3600", upsert: false });
 
     if (uploadError) {
-      console.error("[LENTERA] Storage upload error:", uploadError.message);
-      showToast(`Gagal mengunggah berkas: ${uploadError.message}`, "error");
-      onProgress?.(0);
-      return;
+      if (!uploadError?.message || uploadError.message.includes("Load failed") || uploadError.message.includes("Failed to fetch") || uploadError.message.includes("Network")) {
+        // Silent fallback
+      } else {
+        console.error("[LENTERA] Storage upload error:", uploadError.message);
+        showToast(`Gagal mengunggah berkas: ${uploadError.message}`, "error");
+        onProgress?.(0);
+        return;
+      }
     }
 
     onProgress?.(70);
@@ -749,6 +792,27 @@ export const RoadProvider: React.FC<{ children: React.ReactNode }> = ({ children
     onProgress?.(100);
 
     if (error) {
+      if (!error?.message || error.message.includes("Load failed") || error.message.includes("Failed to fetch") || error.message.includes("Network")) {
+         // Silently allow optimistic local add
+         const localGuide: GuidelineDocument = {
+            id: `guide-local-${Date.now()}`,
+            title: guide.title,
+            documentNo: guide.documentNo,
+            year: guide.year,
+            category: guide.category,
+            publisher: guide.publisher,
+            fileName: guide.fileName,
+            fileSize: guide.fileSize,
+            fileUrl: URL.createObjectURL(file),
+            summary: guide.summary,
+            isOfficial: false,
+            uploadedAt: "Baru saja",
+         };
+         setGuidelines((prev) => [localGuide, ...prev]);
+         showToast("Dokumen pedoman berhasil ditambahkan secara lokal!", "success");
+         await _addActivity("Unggah Pedoman Baru", `Dokumen pedoman "${guide.title}" ditambahkan lokal.`, "task_alt");
+         return;
+      }
       console.error("[LENTERA] addGuideline error:", error.message);
       showToast(`Gagal menyimpan metadata pedoman: ${error.message}`, "error");
       return;
@@ -778,16 +842,15 @@ export const RoadProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const { error } = await supabase.from("guidelines").delete().eq("id", id);
 
     if (error) {
-      if (id.startsWith("guide-mock-")) {
-        console.warn("[LENTERA] deleteGuideline bypassed for mock guideline");
-        // Keep optimistic update, do not rollback since it's just a local mock
-      } else {
-        // Rollback
-        setGuidelines((prev) => [guideToDelete, ...prev]);
-        console.error("[LENTERA] deleteGuideline error:", error.message);
-        showToast(`Gagal menghapus pedoman: ${error.message}`, "error");
-        return;
+      if (!error?.message || error.message.includes("Load failed") || error.message.includes("Failed to fetch") || error.message.includes("Network")) {
+         // Silently allow optimistic delete
+         return;
       }
+      // Rollback
+      setGuidelines((prev) => [guideToDelete, ...prev]);
+      console.error("[LENTERA] deleteGuideline error:", error.message);
+      showToast(`Gagal menghapus pedoman: ${error.message}`, "error");
+      return;
     }
 
     showToast("Dokumen pedoman berhasil dihapus.", "info");

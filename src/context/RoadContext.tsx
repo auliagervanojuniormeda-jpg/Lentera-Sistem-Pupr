@@ -7,7 +7,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { RoadSegment, RoadCondition, SurfaceType, MaintenanceActivity, LegerDocument, GuidelineDocument } from "../types";
 import { supabase } from "../lib/supabase";
 import { DISTRICT_LIST, KECAMATAN_MAP, INITIAL_ROAD_SEGMENTS } from "../data/initialData";
-import { saveDocumentToDB, getDocumentsFromDB, deleteDocumentFromDB, updateDocumentMetadataInDB } from "../lib/indexeddb";
+import { saveDocumentToDB, getDocumentsFromDB, deleteDocumentFromDB, updateDocumentMetadataInDB, saveGuidelineToDB, getGuidelinesFromDB, deleteGuidelineFromDB } from "../lib/indexeddb";
 
 // ─── DB Row → Frontend Type Mappers ──────────────────────────────────────────
 
@@ -277,11 +277,23 @@ export const RoadProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setKecamatanMap(map);
     }
 
+    let allGuides: GuidelineDocument[] = [];
     if (guideRes.error) {
       handleFetchError("Guidelines", guideRes.error);
     } else {
-      setGuidelines((guideRes.data ?? []).map(mapDbToGuideline));
+      allGuides = (guideRes.data ?? []).map(mapDbToGuideline);
     }
+    try {
+      const localGuides = await getGuidelinesFromDB();
+      const formattedLocalGuides = localGuides.map(item => ({
+        ...item.metadata,
+        fileUrl: URL.createObjectURL(item.file)
+      }));
+      allGuides = [...formattedLocalGuides, ...allGuides];
+    } catch (e) {
+      console.error("[LENTERA] IndexedDB load guidelines error:", e);
+    }
+    setGuidelines(allGuides);
 
     if (hasError) {
       showToast("Sebagian data gagal dimuat. Cek koneksi database.", "error");
@@ -818,6 +830,14 @@ export const RoadProvider: React.FC<{ children: React.ReactNode }> = ({ children
             isOfficial: false,
             uploadedAt: "Baru saja",
          };
+         
+         // Simpan ke IndexedDB
+         try {
+           await saveGuidelineToDB(localGuide, file);
+         } catch (e) {
+           console.error("[LENTERA] saveGuidelineToDB error:", e);
+         }
+
          setGuidelines((prev) => [localGuide, ...prev]);
          showToast("Dokumen pedoman berhasil ditambahkan secara lokal!", "success");
          await _addActivity("Unggah Pedoman Baru", `Dokumen pedoman "${guide.title}" ditambahkan lokal.`, "task_alt");
@@ -845,6 +865,15 @@ export const RoadProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const deleteGuideline = async (id: string): Promise<void> => {
     const guideToDelete = guidelines.find((g) => g.id === id);
     if (!guideToDelete) return;
+
+    // Delete dari IndexedDB jika dokumen lokal
+    if (id.startsWith("guide-local-") || id.startsWith("guide-mock-")) {
+      try {
+        await deleteGuidelineFromDB(id);
+      } catch (e) {
+        console.error("[LENTERA] deleteGuidelineFromDB error:", e);
+      }
+    }
 
     // Optimistic update
     setGuidelines((prev) => prev.filter((g) => g.id !== id));

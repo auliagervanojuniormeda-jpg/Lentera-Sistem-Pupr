@@ -339,7 +339,7 @@ function LenteraAppContent({ onLogout }: { onLogout: () => void }) {
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded bg-white flex items-center justify-center p-1 shadow border border-outline-variant/30 shrink-0">
               <img 
-                src="https://upload.wikimedia.org/wikipedia/commons/thumb/c/c0/Coat_of_arms_of_East_Nusa_Tenggara.svg/512px-Coat_of_arms_of_East_Nusa_Tenggara.svg.png" 
+                src="https://upload.wikimedia.org/wikipedia/commons/c/c0/Coat_of_arms_of_East_Nusa_Tenggara.svg" 
                 alt="Logo NTT" 
                 className="w-full h-full object-contain"
                 referrerPolicy="no-referrer"

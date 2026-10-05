@@ -1,10 +1,14 @@
 export const initDB = (): Promise<IDBDatabase> => {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open('LenteraDB', 1);
+    // Increase version to 2 to add guidelines store
+    const request = indexedDB.open('LenteraDB', 2);
     request.onupgradeneeded = () => {
       const db = request.result;
       if (!db.objectStoreNames.contains('documents')) {
         db.createObjectStore('documents', { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains('guidelines')) {
+        db.createObjectStore('guidelines', { keyPath: 'id' });
       }
     };
     request.onsuccess = () => resolve(request.result);
@@ -64,5 +68,38 @@ export const updateDocumentMetadataInDB = async (id: string, updates: any): Prom
       }
     };
     getRequest.onerror = () => reject(getRequest.error);
+  });
+};
+
+export const saveGuidelineToDB = async (guide: any, file: File): Promise<void> => {
+  const db = await initDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction('guidelines', 'readwrite');
+    const store = transaction.objectStore('guidelines');
+    store.put({ id: guide.id, metadata: guide, file });
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error);
+  });
+};
+
+export const getGuidelinesFromDB = async (): Promise<any[]> => {
+  const db = await initDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction('guidelines', 'readonly');
+    const store = transaction.objectStore('guidelines');
+    const request = store.getAll();
+    request.onsuccess = () => resolve(request.result || []);
+    request.onerror = () => reject(request.error);
+  });
+};
+
+export const deleteGuidelineFromDB = async (id: string): Promise<void> => {
+  const db = await initDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction('guidelines', 'readwrite');
+    const store = transaction.objectStore('guidelines');
+    store.delete(id);
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error);
   });
 };

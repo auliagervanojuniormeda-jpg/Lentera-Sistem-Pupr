@@ -12,8 +12,19 @@ import {
   Coins,
   DollarSign,
   AlertTriangle,
-  CheckCircle2
+  CheckCircle2,
+  BarChart2
 } from "lucide-react";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Cell
+} from "recharts";
 
 export const Dashboard: React.FC = () => {
   const { segments, documents } = useRoads();
@@ -64,6 +75,28 @@ export const Dashboard: React.FC = () => {
 
     return { totalPotential, totalPaid, totalUnpaid, totalOverdue };
   }, []);
+
+  const chartData = useMemo(() => {
+    return [
+      { name: "Lunas", value: retributionStats.totalPaid, color: "#10b981" }, // emerald-500
+      { name: "Belum Dibayar", value: retributionStats.totalUnpaid, color: "#f59e0b" }, // amber-500
+      { name: "Jatuh Tempo", value: retributionStats.totalOverdue, color: "#ef4444" }, // red-500
+    ];
+  }, [retributionStats]);
+
+  const CustomTooltip = ({ active, payload, label }: any) => {
+    if (active && payload && payload.length) {
+      return (
+        <div className="bg-surface border border-outline-variant/60 p-3 rounded-lg shadow-lg">
+          <p className="font-bold text-on-surface mb-1">{label}</p>
+          <p className="text-primary font-mono font-medium">
+            {formatRp(payload[0].value)}
+          </p>
+        </div>
+      );
+    }
+    return null;
+  };
 
   const formatRp = (num: number) => {
     return new Intl.NumberFormat("id-ID", {
@@ -189,6 +222,41 @@ export const Dashboard: React.FC = () => {
               <p className="text-xs font-bold text-on-surface-variant uppercase tracking-wider">Jatuh Tempo</p>
             </div>
             <p className="text-lg font-black text-red-600">{formatRp(retributionStats.totalOverdue)}</p>
+          </div>
+        </div>
+
+        {/* Retribution Chart */}
+        <div className="p-6 border-t border-outline-variant/60 bg-surface-container-low/30">
+          <h4 className="font-label-md text-on-surface-variant uppercase tracking-wider mb-4 flex items-center gap-2">
+            <BarChart2 className="w-4 h-4" /> Grafik Pembayaran
+          </h4>
+          <div className="h-64 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart
+                data={chartData}
+                margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" vertical={false} />
+                <XAxis 
+                  dataKey="name" 
+                  tick={{ fill: "#94a3b8", fontSize: 12, fontWeight: 600 }}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                <YAxis 
+                  tickFormatter={(value) => `Rp${(value / 1000000).toFixed(0)}Jt`}
+                  tick={{ fill: "#94a3b8", fontSize: 12 }}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                <Tooltip content={<CustomTooltip />} cursor={{ fill: "rgba(255,255,255,0.05)" }} />
+                <Bar dataKey="value" radius={[6, 6, 0, 0]} maxBarSize={60}>
+                  {chartData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.color} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
           </div>
         </div>
       </div>
